@@ -1,6 +1,5 @@
 local json = require "cjson"
 local re_match = ngx.re.match
-
 local _M = {}
 local mt = { __index = _M }
 
@@ -27,6 +26,7 @@ end
 
 local function remove_expired_keys(keys_array, last_counter_key)
     local err
+
     last_counter_key, err = re_match(last_counter_key, [[(?<=\.).*(?=.counter)]], "jo")
     if err then
         kong.log.err("error get key from last counter key by regex", err)
@@ -40,6 +40,7 @@ local function remove_expired_keys(keys_array, last_counter_key)
             kong.log.notice("error get key from keys array by regex", err)
             return
         end
+
         if last_counter_key > 0 and next(key) ~= nil then
             local key_number = tonumber(key[0])
             if key_number < last_counter_key then
@@ -49,16 +50,16 @@ local function remove_expired_keys(keys_array, last_counter_key)
     end
 end
 
-function _M.copy_key_under_namespace(self, counter_dict, uuid, key, last_counter_key)
+function _M.keep_keys_under_plugin_instance(self, counter_dict, uuid, counter_key, last_counter_key, expiry)
     local keys_array_str = ngx.shared[counter_dict]:get(uuid)
     local keys_array = {}
     setmetatable(keys_array, json.empty_array_mt)
 
     if keys_array_str then
         keys_array = json.decode(keys_array_str)
-        insert(keys_array, nil, key)
+        insert(keys_array, nil, counter_key)
     else
-        insert(keys_array, 1, key)
+        insert(keys_array, 1, counter_key)
     end
     remove_expired_keys(keys_array, last_counter_key)
     local err
@@ -67,6 +68,7 @@ function _M.copy_key_under_namespace(self, counter_dict, uuid, key, last_counter
         return nil, "could not encode keys array: " .. err
     end
     ngx.shared[counter_dict]:set(uuid, keys_array_str)
+    ngx.shared[counter_dict]:expire(uuid, expiry)
 end
 
 return _M

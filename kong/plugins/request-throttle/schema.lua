@@ -35,14 +35,14 @@ return {
         { config = {
             type = "record",
             fields = {
-                { limit = { type = "number", required = true }, },
-                { window_size_in_seconds = { type = "number", required = true }, },
+                { limit = { type = "integer", required = true, gt = 0, }, },
+                { window_size_in_seconds = { type = "integer", required = true, gt = 0, }, },
                 { limit_by = {
                     type = "string",
                     default = "current_entity",
                     one_of = { "uri", "current_entity", "ip" },
                 }, },
-                { sync_rate = { type = "number", required = true, default = 1 }, },
+                { sync_rate = { type = "integer", required = true, default = 1, gt = 0, }, },
                 {
                     strategy = {
                         type = "string",

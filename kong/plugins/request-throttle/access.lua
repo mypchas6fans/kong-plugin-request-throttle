@@ -65,9 +65,19 @@ local function add_sample_and_estimate_total_count(counter_dict, limit_key, limi
 
 end
 
-local function sync_keys(counter_dict, uuid, counter_key, last_counter_key)
+local function keep_keys_under_plugin_instance(counter_dict, uuid, counter_key, last_counter_key, expiry)
+    --local keys_array = {}
+    --setmetatable(keys_array, json.empty_array_mt)
+    --keys_array[1] = counter_key
+    --keys_array[2] = last_counter_key
+    --local keys_array_str, err = json.encode(keys_array)
+    --if err then
+    --    kong.log.err("can't encode keys form array to string")
+    --end
+    --ngx.shared[counter_dict]:set(uuid, keys_array_str)
+    --ngx.shared[counter_dict]:expire(uuid, expiry)
     local keep_key = keep_keys:new()
-    keep_key:copy_key_under_namespace(counter_dict, uuid, counter_key, last_counter_key)
+    keep_key:keep_keys_under_plugin_instance(counter_dict, uuid, counter_key, last_counter_key, expiry)
 end
 
 local function get_limit_key(conf)
@@ -114,8 +124,7 @@ function _M.execute(conf)
         return kong.response.exit(429)
     end
 
-    sync_keys(conf.counter_dict, conf.uuid, counter_key, last_counter_key)
-
+    pcall(keep_keys_under_plugin_instance, conf.counter_dict, conf.uuid, counter_key, last_counter_key, conf.window_size_in_seconds)
 end
 
 return _M
