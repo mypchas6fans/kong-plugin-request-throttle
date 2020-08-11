@@ -2,26 +2,22 @@ local _redis = require "kong.plugins.request-throttle.redis"
 local json = require "cjson"
 local resty_lock = require "resty.lock"
 
-local function sync_counter_to_redis(premature, conf, redis)
-    if premature then
+local function sync_counter_to_redis(conf, redis)
+    local keys_array_str = ngx.shared[conf.counter_dict]:get(conf.uuid)
+    if keys_array_str == nil or keys_array_str == '' then
         return
     end
 
-    if ngx.worker.id() == 0 then
-        local keys_array_str = ngx.shared[conf.counter_dict]:get(conf.uuid)
-        if keys_array_str == nil or keys_array_str == '' then
+    local keys_array = {}
+    setmetatable(keys_array, json.empty_array_mt)
+    keys_array = json.decode(keys_array_str)
+    ngx.timer.at(0, function(premature)
+        if premature then
             return
         end
-        local keys_array = {}
-        setmetatable(keys_array, json.empty_array_mt)
-        keys_array = json.decode(keys_array_str)
-        ngx.timer.at(0, function(premature)
-            if premature then
-                return
-            end
-            redis:sync_redis_with_shm(keys_array, conf.counter_dict, conf.window_size_in_seconds * 50)
-        end)
-    end
+        redis:sync_redis_with_shm(keys_array, conf.counter_dict, conf.window_size_in_seconds * 2)
+    end)
+
 end
 
 local function fetch_kong_node_from_redis(redis)
@@ -76,7 +72,7 @@ local function sync_request_counter(premature)
                 --根据时间间隔进行触发
                 local trigger = ngx.time() % plugin.config.sync_rate == 0
                 if trigger then
-                    ngx.timer.at(plugin.config.sync_rate, sync_counter_to_redis, plugin.config, redis)
+                    sync_counter_to_redis(plugin.config, redis)
                 end
 
             end

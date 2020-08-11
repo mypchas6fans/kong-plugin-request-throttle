@@ -90,7 +90,6 @@ function _M:sync_redis_with_shm(keys_array, counter_dict, expire_time)
             self.red:expire(key, expire_time)
 
             local global_value = get_global_value(key, self.red)
-
             local kong_nodes_number = ngx.shared[counter_dict]:get(kong.node.get_id())
             if not kong_nodes_number then
                 return
