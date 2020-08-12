@@ -8,8 +8,7 @@ local function sync_counter_to_redis(conf, redis)
         return
     end
 
-    local keys_array = {}
-    setmetatable(keys_array, json.empty_array_mt)
+    local keys_array = kong.table.new(2, 0)
     keys_array = json.decode(keys_array_str)
     ngx.timer.at(0, function(premature)
         if premature then

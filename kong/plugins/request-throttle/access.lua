@@ -4,7 +4,8 @@ local string_format = string.format
 local pcall = pcall
 local kong = kong
 local ngx_now = ngx.now
-local keep_keys = require "kong.plugins.request-throttle.keep_keys"
+local json = require "cjson"
+
 local _M = {}
 
 local function store_incr(counter_dict, key, delta, expiry)
@@ -66,18 +67,16 @@ local function add_sample_and_estimate_total_count(counter_dict, limit_key, limi
 end
 
 local function keep_keys_under_plugin_instance(counter_dict, uuid, counter_key, last_counter_key, expiry)
-    --local keys_array = {}
-    --setmetatable(keys_array, json.empty_array_mt)
-    --keys_array[1] = counter_key
-    --keys_array[2] = last_counter_key
-    --local keys_array_str, err = json.encode(keys_array)
-    --if err then
-    --    kong.log.err("can't encode keys form array to string")
-    --end
-    --ngx.shared[counter_dict]:set(uuid, keys_array_str)
-    --ngx.shared[counter_dict]:expire(uuid, expiry)
-    local keep_key = keep_keys:new()
-    keep_key:keep_keys_under_plugin_instance(counter_dict, uuid, counter_key, last_counter_key, expiry)
+    local keys_array = kong.table.new(2, 0)
+    keys_array[1] = counter_key
+    keys_array[2] = last_counter_key
+    local keys_array_str, err = json.encode(keys_array)
+    if err then
+        kong.log.err("can't encode keys form array to string")
+    end
+    kong.table.clear(keys_array)
+    ngx.shared[counter_dict]:set(uuid, keys_array_str)
+    ngx.shared[counter_dict]:expire(uuid, expiry)
 end
 
 local function get_limit_key(conf)

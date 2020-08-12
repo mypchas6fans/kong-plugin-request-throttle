@@ -106,6 +106,7 @@ function _M:sync_redis_with_shm(keys_array, counter_dict, expire_time)
         end
     end
 
+    kong.table.clear(keys_array)
     self:close()
 end
 
@@ -120,7 +121,6 @@ function _M:zadd(key, score, member)
         kong.log.err("failed to zadd cache: ", err)
         return
     end
-    --self.red:expire(key, expire_time)
     self:close()
 end
 
