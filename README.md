@@ -31,7 +31,8 @@ Kong企业版提供了高级限流插件，支持滑动窗口算法，关于此�
 
 而滑动窗口算法的问题在于占用内存较高，计算过程复杂，如果在网关上使用滑动窗口算法，会拖慢平均响应时间，相应的内存使用较高。
 
-伪滑动窗口算法正好可以解决这个问题，关于伪滑动窗口算法，具体参考https://blog.cloudflare.com/counting-things-a-lot-of-different-things/。这个算法在CloudFlare在生产环境中得到验证。虽然做不到像真正的滑动窗口算法那样精确，但我认为我们在做限流的时候，限流值也是估算出来的，当设置了一个限流值，并不代表只要流量稍微超过一点限流值，后端服务就会挂掉。所以在网关上使用的限流算法，可以允许可控的误差存在。使用限流的真正目的不是为了将流量精确地限制在某一个范围内，而是将流量控制在后端服务的承载能力之内。
+伪滑动窗口算法正好可以解决这个问题，关于伪滑动窗口算法，具体参考https://blog.cloudflare.com/counting-things-a-lot-of-different-things/。
+这个算法在CloudFlare在生产环境中得到验证。虽然做不到像真正的滑动窗口算法那样精确，但我认为我们在做限流的时候，限流值也是估算出来的，当设置了一个限流值，并不代表只要流量稍微超过一点限流值，后端服务就会挂掉。所以在网关上使用的限流算法，可以允许可控的误差存在。使用限流的真正目的不是为了将流量精确地限制在某一个范围内，而是将流量控制在后端服务的承载能力之内。
 
 简要介绍一下这个算法。
 
@@ -165,9 +166,7 @@ Kong开源的限流插件也提供集群限流能力，可以把节点的数据�
 
 ### 0x04 参考：
 
-[又拍云网关速率限制实践]([https://www.upyun.com/tech/article/569/%E5%8F%88%E6%8B%8D%E4%BA%91%E7%BD%91%E5%85%B3%E9%80%9F%E7%8E%87%E9%99%90%E5%88%B6%E5%AE%9E%E8%B7%B5.html](https://www.upyun.com/tech/article/569/又拍云网关速率限制实践.html))
-
-[How to Design a Scalable Rate Limiting Algorithm](https://konghq.com/blog/how-to-design-a-scalable-rate-limiting-algorithm/)(中文翻译版本:[如何设计一个可扩展的限流算法](http://dockone.io/article/9746))
-
-3-[高并发下的限流分析](https://webcache.googleusercontent.com/search?q=cache:oe_iIBXUGj8J:https://note.dolyw.com/seckill/02-Distributed-Limit.html+&cd=1&hl=zh-CN&ct=clnk&gl=us)
+1. [又拍云网关速率限制实践]([https://www.upyun.com/tech/article/569/%E5%8F%88%E6%8B%8D%E4%BA%91%E7%BD%91%E5%85%B3%E9%80%9F%E7%8E%87%E9%99%90%E5%88%B6%E5%AE%9E%E8%B7%B5.html](https://www.upyun.com/tech/article/569/又拍云网关速率限制实践.html))
+2. [How to Design a Scalable Rate Limiting Algorithm](https://konghq.com/blog/how-to-design-a-scalable-rate-limiting-algorithm/)(中文翻译版本:[如何设计一个可扩展的限流算法](http://dockone.io/article/9746))
+3. [高并发下的限流分析](
 
