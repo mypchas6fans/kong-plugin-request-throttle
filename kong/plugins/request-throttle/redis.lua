@@ -76,7 +76,7 @@ local function get_global_value(key, redis)
     return sum(global_value_array)
 end
 
-function _M:sync_redis_with_shm(keys_array, counter_dict, expire_time)
+function _M:sync_redis_with_shm(keys_array, counter_dict, expire_time, conf_limit)
     local connected = self:connect()
     if not connected then
         return
@@ -102,7 +102,13 @@ function _M:sync_redis_with_shm(keys_array, counter_dict, expire_time)
             if err or ttl <= 0 then
                 break
             end
-            ngx.shared[counter_dict]:set(key, limit, ttl)
+
+            local node_limit = modf(floor(conf_limit / kong_nodes_number + 0.5))
+
+            if node_limit > limit then
+                ngx.shared[counter_dict]:set(key, limit, ttl)
+            end
+
         end
     end
 

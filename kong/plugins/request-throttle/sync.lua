@@ -14,18 +14,18 @@ local function sync_counter_to_redis(conf, redis)
         if premature then
             return
         end
-        redis:sync_redis_with_shm(keys_array, conf.counter_dict, conf.window_size_in_seconds * 2)
+        redis:sync_redis_with_shm(keys_array, conf.counter_dict, conf.window_size_in_seconds, conf.limit)
     end)
 
 end
 
-local function fetch_kong_node_from_redis(redis)
+local function fetch_kong_node_from_redis(redis, sync_rate)
     local now = ngx.time()
     redis:zadd("kong_nodes", now, kong.node.get_id())
-    return redis:zcount("kong_nodes", now - 0.5, now + 0.5)
+    return redis:zcount("kong_nodes", now - sync_rate, now + sync_rate)
 end
 
-local function sync_kong_node(counter_dict, redis)
+local function sync_kong_node(counter_dict, redis, sync_rate)
     --由于有多个插件实例存在
     --用lock来控制向redis同步kong节点数量的频率
     local lock, _ = resty_lock:new(counter_dict)
@@ -39,7 +39,7 @@ local function sync_kong_node(counter_dict, redis)
         return
     end
 
-    local kong_nodes_number = fetch_kong_node_from_redis(redis)
+    local kong_nodes_number = fetch_kong_node_from_redis(redis, sync_rate)
     if not kong_nodes_number then
         ngx.shared[counter_dict]:set(kong.node.get_id(), 1)
         return
@@ -66,7 +66,7 @@ local function sync_request_counter(premature)
                 --同步 kong 节点信息
                 local redis = _redis:new()
                 redis:init(plugin.config)
-                sync_kong_node(plugin.config.counter_dict, redis)
+                sync_kong_node(plugin.config.counter_dict, redis, plugin.config.sync_rate)
 
                 --根据时间间隔进行触发
                 local trigger = ngx.time() % plugin.config.sync_rate == 0
