@@ -168,5 +168,5 @@ Kong开源的限流插件也提供集群限流能力，可以把节点的数据�
 
 1. [又拍云网关速率限制实践]([https://www.upyun.com/tech/article/569/%E5%8F%88%E6%8B%8D%E4%BA%91%E7%BD%91%E5%85%B3%E9%80%9F%E7%8E%87%E9%99%90%E5%88%B6%E5%AE%9E%E8%B7%B5.html](https://www.upyun.com/tech/article/569/又拍云网关速率限制实践.html))
 2. [How to Design a Scalable Rate Limiting Algorithm](https://konghq.com/blog/how-to-design-a-scalable-rate-limiting-algorithm/)(中文翻译版本:[如何设计一个可扩展的限流算法](http://dockone.io/article/9746))
-3. [高并发下的限流分析](
+3. [高并发下的限流分析](https://webcache.googleusercontent.com/search?q=cache:oe_iIBXUGj8J:https://note.dolyw.com/seckill/02-Distributed-Limit.html+&cd=1&hl=zh-CN&ct=clnk&gl=us)
 
