@@ -108,5 +108,4 @@ Here's a list of all the parameters which can be used in this plugin's configura
 ## Acknowledgements
 
 [lua-resty-global-throttle](https://github.com/ElvinEfendi/lua-resty-global-throttle) 
-
-[lua-resty-redis-connector](
+[lua-resty-redis-connector](https://github.com/ledgetech/lua-resty-redis-connector)
