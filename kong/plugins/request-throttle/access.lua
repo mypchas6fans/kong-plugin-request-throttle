@@ -120,7 +120,7 @@ function _M.execute(conf)
     end
 
     if should_throttle then
-        return kong.response.exit(429)
+        return kong.response.error(429, "当前服务正忙，请稍后重试"
     end
 
     pcall(keep_keys_under_plugin_instance, conf.counter_dict, conf.uuid, counter_key, last_counter_key, conf.window_size_in_seconds)
