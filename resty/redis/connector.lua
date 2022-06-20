@@ -1,15 +1,36 @@
-local ipairs, pcall, error, tostring, type, next, setmetatable, getmetatable =
-    ipairs, pcall, error, tostring, type, next, setmetatable, getmetatable
+local ipairs, pairs, pcall, error, tostring, type, next, setmetatable, getmetatable =
+    ipairs, pairs, pcall, error, tostring, type, next, setmetatable, getmetatable
 
 local ngx_log = ngx.log
 local ngx_ERR = ngx.ERR
 local ngx_re_match = ngx.re.match
+local null = ngx.null
 
+local str_find = string.find
+local str_sub = string.sub
 local tbl_remove = table.remove
 local tbl_sort = table.sort
-local ok, tbl_new = pcall(require, "table.new")
-if not ok then
-    tbl_new = function (narr, nrec) return {} end -- luacheck: ignore 212
+local tbl_clone, tbl_new
+do
+    local ok
+    ok, tbl_new = pcall(require, "table.new")
+    if not ok then
+        tbl_new = function (narr, nrec) return {} end -- luacheck: ignore 212
+    end
+    ok, tbl_clone = pcall(require, "table.clone")
+    if not ok then
+        tbl_clone = function (src)
+            local result = {}
+            for i, v in ipairs(src) do
+                result[i] = v
+            end
+            for k, v in pairs(src) do
+                result[k] = v
+            end
+
+            return result
+        end
+    end
 end
 
 local redis = require("resty.redis")
@@ -87,6 +108,7 @@ end
 local DEFAULTS = setmetatable({
     connect_timeout = 100,
     read_timeout = 1000,
+    send_timeout = 1000,
     connection_options = {}, -- pool, etc
     keepalive_timeout = 60000,
     keepalive_poolsize = 30,
@@ -94,7 +116,9 @@ local DEFAULTS = setmetatable({
     host = "127.0.0.1",
     port = 6379,
     path = "", -- /tmp/redis.sock
+    username = "",
     password = "",
+    sentinel_username = "",
     sentinel_password = "",
     db = 0,
     url = "", -- DSN url
@@ -124,7 +148,7 @@ local default_disabled_commands = {
 
 
 local _M = {
-    _VERSION = '0.08',
+    _VERSION = '0.11.0',
 }
 
 local mt = { __index = _M }
@@ -148,18 +172,29 @@ local function parse_dsn(params)
             fields = { "password", "master_name", "role", "db" }
         end
 
-        -- password may not be present
+        -- username/password may not be present
         if #m < 5 then tbl_remove(fields, 1) end
 
         local roles = { m = "master", s = "slave" }
 
         local parsed_params = {}
 
-        for i,v in ipairs(fields) do
-            parsed_params[v] = m[i + 1]
+        for i, v in ipairs(fields) do
+            if v == "db" or v == "port" then
+                parsed_params[v] = tonumber(m[i + 1])
+            else
+                parsed_params[v] = m[i + 1]
+            end
+
             if v == "role" then
                 parsed_params[v] = roles[parsed_params[v]]
             end
+        end
+
+        local colon_pos = str_find(parsed_params.password or "", ":", 1, true)
+        if colon_pos then
+            parsed_params.username = str_sub(parsed_params.password, 1, colon_pos - 1)
+            parsed_params.password = str_sub(parsed_params.password, colon_pos + 1)
         end
 
         return tbl_copy_merge_defaults(params, parsed_params)
@@ -170,13 +205,30 @@ end
 _M.parse_dsn = parse_dsn
 
 
-function _M.new(config)
-    -- Fill out gaps in config with any dsn params
+-- Fill out gaps in config with any dsn params
+local function apply_dsn(config)
     if config and config.url then
         local err
         config, err = parse_dsn(config)
         if err then ngx_log(ngx_ERR, err) end
     end
+    return config
+end
+
+
+-- For backwards compatability; previously send_timeout was implicitly the
+-- same as read_timeout. So if only the latter is given, ensure the former
+-- matches.
+local function apply_fallback_send_timeout(config)
+    if config and not config.send_timeout and config.read_timeout then
+        config.send_timeout = config.read_timeout
+    end
+end
+
+
+function _M.new(config)
+    config = apply_dsn(config)
+    apply_fallback_send_timeout(config)
 
     local ok, config = pcall(tbl_copy_merge_defaults, config, DEFAULTS)
     if not ok then
@@ -197,11 +249,8 @@ end
 
 
 function _M.connect(self, params)
-    if params and params.url then
-        local err
-        params, err = parse_dsn(params)
-        if err then ngx_log(ngx_ERR, err) end
-    end
+    params = apply_dsn(params)
+    apply_fallback_send_timeout(params)
 
     params = tbl_copy_merge_defaults(params, self.config)
 
@@ -223,16 +272,19 @@ end
 
 
 function _M.connect_via_sentinel(self, params)
-    local sentinels = params.sentinels
     local master_name = params.master_name
     local role = params.role
     local db = params.db
+    local username = params.username
     local password = params.password
-    local sentinel_password = params.sentinel_password
-    if sentinel_password then
-        for i,host in ipairs(sentinels) do
-            host.password = sentinel_password
-        end
+
+    local sentinels = tbl_new(#params.sentinels, 0)
+    for i, sentinel in ipairs(params.sentinels) do
+        local host = tbl_clone(sentinel)
+        host.db = null
+        host.username = host.username or params.sentinel_username
+        host.password = host.password or params.sentinel_password
+        sentinels[i] = host
     end
 
     local sentnl, err, previous_errors = self:try_hosts(sentinels)
@@ -246,27 +298,26 @@ function _M.connect_via_sentinel(self, params)
             return nil, err
         end
 
+        sentnl:set_keepalive()
+
         master.db = db
+        master.username = username
         master.password = password
 
         local redis, err = self:connect_to_host(master)
-        if redis then
-            sentnl:set_keepalive()
-            return redis, err
-        else
-            if role == "master" then
-                return nil, err
-            end
+        if not redis then
+            return nil, err
         end
 
+        return redis
     else
         -- We want a slave
         local slaves, err = get_slaves(sentnl, master_name)
-        sentnl:set_keepalive()
-
         if not slaves then
             return nil, err
         end
+
+        sentnl:set_keepalive()
 
         -- Put any slaves on 127.0.0.1 at the front
         tbl_sort(slaves, sort_by_localhost)
@@ -274,6 +325,7 @@ function _M.connect_via_sentinel(self, params)
         if db or password then
             for _, slave in ipairs(slaves) do
                 slave.db = db
+                slave.username = username
                 slave.password = password
             end
         end
@@ -281,9 +333,9 @@ function _M.connect_via_sentinel(self, params)
         local slave, err, previous_errors = self:try_hosts(slaves)
         if not slave then
             return nil, err, previous_errors
-        else
-            return slave
         end
+
+        return slave
     end
 end
 
@@ -311,7 +363,7 @@ function _M.connect_to_host(self, host)
 
     -- config options in 'host' should override the global defaults
     -- host contains keys that aren't in config
-    -- this can break tbl_copy_merge_defaults, hence the mannual loop here
+    -- this can break tbl_copy_merge_defaults, hence the manual loop here
     local config = tbl_copy(self.config)
     for k, _ in pairs(config) do
         if host[k] then
@@ -319,9 +371,13 @@ function _M.connect_to_host(self, host)
         end
     end
 
-    r:set_timeout(config.connect_timeout)
+    r:set_timeouts(
+        config.connect_timeout,
+        config.send_timeout,
+        config.read_timeout
+    )
 
-    -- stub out methods for disabled commands
+    -- Stub out methods for disabled commands
     if next(config.disabled_commands) then
         for _, cmd in ipairs(config.disabled_commands) do
             r[cmd] = function()
@@ -350,27 +406,43 @@ function _M.connect_to_host(self, host)
     if not ok then
         return nil, err
     else
-        r:set_timeout(config.read_timeout)
-
+        local username = host.username
         local password = host.password
         if password and password ~= "" then
-            local res, err = r:auth(password)
+            local res
+            -- usernames are supported only on Redis 6+, so use new AUTH form only when absolutely necessary
+            if username and username ~= "" and username ~= "default" then
+                res, err = r:auth(username, password)
+            else
+                res, err = r:auth(password)
+            end
             if err then
-                ngx_log(ngx_ERR, err)
                 return res, err
             end
         end
 
-        -- No support for DBs in proxied Redis.
-        if config.connection_is_proxied ~= true and host.db ~= nil then
-            r:select(host.db)
+        -- No support for DBs in proxied Redis and Redis Sentinel
+        if config.connection_is_proxied ~= true and host.db ~= nil and host.db ~= null then
+            local res, select_err = r:select(host.db)
+
+            -- SELECT will fail if we are connected to sentinel:
+            -- detect it and ignore error message it that's the case
+            if select_err and str_find(select_err, "ERR unknown command") then
+                local role = r:role()
+                if role and role[1] == "sentinel" then
+                    select_err = nil
+                end
+            end
+            if select_err then
+                return res, select_err
+            end
         end
         return r, nil
     end
 end
 
 
-local function set_keepalive(self, redis)
+function _M.set_keepalive(self, redis)
     -- Restore connection to "NORMAL" before putting into keepalive pool,
     -- ignoring any errors.
     -- Proxied Redis does not support transactions.
@@ -383,8 +455,6 @@ local function set_keepalive(self, redis)
         config.keepalive_timeout, config.keepalive_poolsize
     )
 end
-_M.set_keepalive = set_keepalive
-
 
 
 -- Deprecated: use config table in new() or connect() instead.
