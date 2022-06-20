@@ -10,7 +10,7 @@ end
 
 
 local _M = {
-    _VERSION = '0.08'
+    _VERSION = '0.11.0'
 }
 
 
@@ -21,6 +21,8 @@ function _M.get_master(sentinel, master_name)
     )
     if res and res ~= ngx_null and res[1] and res[2] then
         return { host = res[1], port = res[2] }
+    elseif res == ngx_null then
+        return nil, "invalid master name"
     else
         return nil, err
     end
@@ -39,7 +41,10 @@ function _M.get_slaves(sentinel, master_name)
                 host[slave[i]] = slave[i + 1]
             end
 
-            if host["master-link-status"] == "ok" then
+            local master_link_status_ok = host["master-link-status"] == "ok"
+            local is_down = host["flags"] and (string.find(host["flags"],"s_down")
+                or string.find(host["flags"],"disconnected"))
+            if master_link_status_ok and not is_down then
                 host.host = host.ip -- for parity with other functions
                 tbl_insert(hosts, host)
             end
