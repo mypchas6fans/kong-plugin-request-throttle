@@ -51,6 +51,7 @@ return {
                         one_of = { "redis", "redis-sentinel" },
                     }, },
                 { counter_dict = { type = "string", required = true, default = "request_throttle_counter" }, },
+                { message = { type = "string", required = true, default = "当前服务正忙，请稍后重试" }, },
                 { uuid = typedefs.uuid, },
                 { redis = {
                     type = "record",
