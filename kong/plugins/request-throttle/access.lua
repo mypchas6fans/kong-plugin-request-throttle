@@ -120,7 +120,7 @@ function _M.execute(conf)
     end
 
     if should_throttle then
-        return kong.response.error(429, conf.message)
+        return kong.response.exit(429, { message = conf.message })
     end
 
     pcall(keep_keys_under_plugin_instance, conf.counter_dict, conf.uuid, counter_key, last_counter_key, conf.window_size_in_seconds)
