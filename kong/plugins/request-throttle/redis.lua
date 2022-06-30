@@ -109,7 +109,7 @@ function _M:sync_redis_with_shm(keys_array, counter_dict, expire_time, conf_limi
                 ngx.shared[counter_dict]:set(key, limit, ttl)
              else
                 --防止膨胀叠加
-                ngx.shared[counters_shared_dict_name]:set(key, node_limit, ttl)
+                ngx.shared[counter_dict]:set(key, node_limit, ttl)
             end
 
         end
